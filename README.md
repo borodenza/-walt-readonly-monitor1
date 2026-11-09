@@ -1,30 +1,17 @@
-# Walt: Mira Recovery — единственная стратегия
+# Walt Mira SHORT — Walt-only futures scout
 
-**Активна только стратегия Mira Recovery.** Trend Following и Momentum Breakout исключены из расчёта сигналов и из мониторинга. Реальные сделки пока **выключены**.
+**Active from 9 November 2026:** SHORT after a sharp 24-hour fall and a confirmed failed rebound. This supersedes Mira Recovery LONG. Trading signals are sourced only from the connected Walt read-only tools, never Github or Hyperliquid.
 
-**Источник:** публичные закрытые 15-минутные OHLCV фьючерсов Hyperliquid USDC-margined perps (`POST https://api.hyperliquid.xyz/info`), пары BTCUSDT, ETHUSDT, SOLUSDT, DOGEUSDT, LINKUSDT, AVAXUSDT, ADAUSDT, XRPUSDT. Это НЕ торговые цены Walt, не Walt OI/спред/глубина.
+The ChatGPT condition-watch automation checks **every four hours** and can recommend at most one deal. It never prepares, places or changes orders. Any trade needs a separate live preview and an explicit second execution confirmation.
 
-**Логика Миры:** изменение за 24 часа ≤ −5%; 7-дневная доходность лучше суточной (лишь контекст, не доказательство стабилизации); цена над EMA20, RSI14 растёт, закрытие выше предыдущего максимума, повышающийся минимум и объём больше среднего за предыдущие 20 баров. Не более трёх уникальных исследовательских кандидатов за сутки UTC, срок кандидата 15 минут. Пропущенные, незакрытые, устаревшие свечи и неполное покрытие хотя бы одного из восьми рынков блокируют сигналы.
+Risk: maximum **10% of usable available collateral**, minimum eligible loss budget **$1**, leverage **≤5×**, SHORT stop **2–2.5% above entry**, net R:R **≥2** after expenses, no more than one position across Walt. If any required market/account data is unavailable or stale, **no signal**. Stop orders do not guarantee a fill price.
 
-**Лимиты (наследуются из прежней стратегии Mira, НЕ из Trend Following):** капитал 9 USDT, максимальный риск 0,18 USDT на сделку, плечо 1×, не более одной открытой позиции на всём торговом субсчёте; не более трёх новых исследовательских предложений в день. До подтверждения исполнимости нельзя увеличивать эти лимиты. Сами по себе лимиты не создают отдельный субсчёт.
+- [Strategy](rules/strategy.md)
+- [Agent/system prompt](PROMPT.md)
+- [System topology](SYSTEM.md)
+- [Maintenance agent instructions](AGENTS.md)
+- [Trade journal template](journal/last_trades.csv)
 
-**GitHub Actions:** запрашивает запуск каждые 15 минут (фактическая частота не гарантирована). `Actions → Walt Mira Recovery - Futures Research Only → last run → Artifacts → mira-futures-...` — скачать ZIP с `walt-system.html` и JSON-отчётом. Дашборд — архивный снимок, не работающий онлайн терминал.
+GitHub Actions runs a **configuration audit only on changes/manual dispatch**; it no longer scans Hyperliquid every 15 minutes. The old scripts `mira.py`, `walt_market_analysis.py`, `walt_status.py`, `walt_guard.py` and `tests/` are kept as historical source code, **not active**. Do not use their old LONG report `walt-report.json` to select trades.
 
-**Почему нет автоторговли:** текущий ChatGPT Walt MCP требует отдельные `prepare_* → подтверждение пользователя → execute_operation` на каждое действие. GitHub не имеет доступа к одобренному Walt Trading Bots API или отдельным разрешениям агента; баланс USDT не подтверждает наличие доступной маржи USDC в используемой интеграции. Не проверены текущее финансирование, реальные цены и глубина стакана, проскальзывание, точный размер и SL/TP, которые укладываются в 0,18 USDT. **Не загружать никакие торговые ключи в публичный GitHub**. Даже поддерживаемый автотрейдинг через субсчёт Walt требует отдельного разрешения/подключения и тестирования. Отсутствие хотя бы одного подтверждения — жёсткий запрет на реальные сделки.
-
-`walt_guard.py` содержит детерминированную стресс-модель издержек/стопа, не исполняет и не разрешает ордер. `walt_status.py` — генератор статуса `RESEARCH_ONLY`. `python3 -m unittest discover -s tests -v` — тесты.
-
-[Подробная спецификация](SYSTEM.md).
-
-
-### Известный блокер на 9 ноября 2026
-Первая проверка после перехода с Binance Spot на **Binance USDⓈ-M Futures** корректно завершилась без сигналов: GitHub runner получает `HTTP 451 (historical Binance source)` от официального `fapi.binance.com` по всем 8 рынкам. 19 тестов кода проходят; рыночные данные не получены. HTTP 451 (historical Binance source) может быть следствием ограничений доступности сервиса в регионе исполнения. Не обходить географические ограничения прокси/зеркалами. Для дальнейшего запуска нужен официально доступный источник исторических данных фьючерсов и разрешённый способ исполнения через Walt. GitHub будет показывать FAIL, а не ложный зелёный статус.
-
-Полезные официальные документы: [Walt agentic account](https://help.walt.io/article/1153-agentic-account), [Walt Perps Terms, bots platform](https://walt.io/docs/perps_terms), [Binance USDⓈ-M futures market data](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data).
-
-
-### Подтверждение сделок в чате Mira
-
-В подключённом ChatGPT-чате команда **«Проверь Mira сейчас»** инициирует поиск действующего сигнала. Если все критерии и Walt-риски подтверждены, агент выводит карточку со сделкой и предлагает **«Проверить [ID]»** или **«Отклонить [ID]»**. Проверить = запросить свежий официальный Walt preview с SL/TP, НЕ исполнить. После успешного предпросмотра пользователь отдельно подтверждает конкретный ордер. Без второго подтверждения никакой сделки. Предпросмотр кратковременен: при истечении пересчитать цены, позиции и риски. В Github Actions запрещены отправка ордеров и ключи. Система ищет сигналы, но не гарантирует их наличие. Источник Hyperliquid — исследовательский, не идентичен Walt.
-
-Подтверждённый GitHub Actions run **42600561956** (9 ноября 2026): 19 тестов успешно, полный набор фьючерсных данных 8 рынков, **0 технических предложений**, никакой сделки. ChatGPT-уведомления настроены раз в час и могут не успеть до истечения 15-минутного сигнала; используйте команду по запросу. Старые описания Binance/Bybit ниже являются историей ошибок источников, не текущим провайдером.
+Walt read-only MCP may not expose 24h/7d price history or live book depth. Until those data points can be verified through an authorized Walt source, the scout correctly refuses to issue a trade. Never commit keys, account tokens or actual trading history to this public repository.
