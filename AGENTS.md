@@ -1,23 +1,13 @@
-# Mira Recovery — read-only maintenance agent
+# Walt Mira SHORT — instructions for code and monitoring agents
 
-Mission: diagnose and repair the research/notification pipeline only. Never place, prepare or execute Walt orders. Never call perps_prepare_* or perps_execute_operation from scheduled code. No Trend Following or Momentum Breakout.
+Single active strategy: read-only **SHORT after a sharp fall and failed rebound**. Consult `rules/strategy.md` and `PROMPT.md` first. Previous Mira Recovery LONG / Trend Following / Momentum Breakout are retired and MUST NOT be used for proposals.
 
-## Data contract
-- Canonical report: `walt-report.json` produced by `python3 walt_market_analysis.py --json` on each scheduled GitHub Actions run. A GitHub Actions artifact is **not** a file in the default branch; fetching it via the repository Contents API yields 404.
-- Obtain the newest successful run and download its `mira-futures-*` artifact ZIP; extract `walt-report.json`. If absent, expired, or >15 minutes old, fail closed. Never fall back to an old run.
-- Hyperliquid public POST /info candleSnapshot, 15m, eight approved markets only. Validate continuity, close times, data source, and all eight observations; never synthesize missing candles.
-- Distinguish research candidates from executable Walt candidates. GitHub research alone is never a trade-ready signal.
+The ChatGPT automation is the ONLY scheduled trading-signal scout. It checks every 4 hours, consumes **Walt read-only** market/account data, and fails closed. Historical 24h/7d changes, bid/ask/depth, liquidity, margin conversions and positions must actually be available; a current rate alone is insufficient. NEVER infer price history or use legacy `walt-report.json`, Hyperliquid, Binance or other venue as signal inputs.
 
-## Maintenance checks
-1. Inspect latest workflow run status, run timestamp, artifact names, and artifact contents. If runs stop, investigate workflow schedule, disabled workflows, permissions, and job logs.
-2. Run `python3 -m unittest discover -s tests -v`; confirm `python3 walt_market_analysis.py --json` can obtain valid Hyperliquid data. Network failures must produce an explicit failure, not a false success.
-3. Ensure GitHub workflow uploads `walt-report.json` and `walt-system.json` even when the scan fails; include source failure diagnostics, but do not mark data valid.
-4. Consumer must read the artifact from the latest successful run, never `fetch_file('walt-report.json')` unless a separate deliberate commit-to-branch publication is implemented.
-5. For an executable proposal, separately check fresh Walt read-only account/contract/market data, USDT versus USDC collateral, one-position limit, 1x, margin <=9 USDT, full risk <=0.18 USDT, clean RR >=2, fees, funding, depth, slippage, and minimum steps. Missing inputs = no signal.
-6. Maximum three distinct candidate proposals per UTC day. Do not send notifications when no fully validated trade exists.
+GitHub is documentation and optional offline risk calculations, not a live price feed. `.github/workflows/walt-readonly-monitor.yml` validates configuration on changes and is intentionally NOT a market scanner. The old `mira.py`, `walt_market_analysis.py`, `walt_status.py`, `walt_guard.py` and `tests/` are historical sources only, not operational rules or live-signal validation.
 
-## Human approval
-Only a live interactive chat may ask for ПРОВЕРИТЬ ID / ОТКЛОНИТЬ ID. ПРОВЕРИТЬ means revalidate and obtain a fresh preview, not execution. An explicit second approval ИСПОЛНИТЬ ИМЕННО ЭТОТ ОРДЕР is mandatory before any execution in a separately authorized interactive session.
+Risk: up to 10% of usable free collateral, minimum allowed stress loss of $1 for consideration; leverage <= 5x and <= contract max; SHORT SL 2–2.5% above Walt entry, net RR>=2, conservative fees, funding, slippage, min contract size and available margin verified. Never assume USDT and USDC balances are interchangeable. Up to one position wallet-wide and one candidate per scan.
 
-## Security
-Never commit secrets or trading tokens. Keep all scheduled workflows strictly read-only. No leverage or risk limit relaxation to make an order pass.
+The scheduled agent MUST NEVER invoke `perps_prepare_*` or `perps_execute_operation`. Any fully verified proposal gets a unique short-lived ID and “ПРОВЕРИТЬ ID” / “ОТКЛОНИТЬ ID”. Those are not execution. A separate live interactive revalidation+Walt preview and a second precise consent “ИСПОЛНИТЬ ИМЕННО ЭТОТ ОРДЕР” are required before execution.
+
+No keys or tokens in this public repository; no trade history with personal financial details. Missing or stale data => **no notifications and no trades**.
