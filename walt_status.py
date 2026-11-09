@@ -53,6 +53,7 @@ def build_status(report, now=None):
                    'max_open_positions': 1},
         'research_candidates': candidates[:3],
         'market_observations': all_obs if data_ok else {},
+        'market_errors': mira.get('errors', {}) if not data_ok and isinstance(mira.get('errors'), dict) else {},
         'blockers': [
             'Текущее подключение Walt требует индивидуальный preview/confirm для каждой сделки',
             'Нет подтверждённого права автономного исполнения по официальному API/subaccount',
@@ -91,6 +92,8 @@ def to_html(status):
         entries.append('<p class="muted">Нет действующих технических кандидатов или данные не прошли проверку.</p>')
     reasons=''.join('<li>'+e(x)+'</li>' for x in status['blockers'])
     banner = 'Рыночные данные получены' if good else 'Нет проверенного полного набора свежих данных'
+    errors = ''.join('<li>' + e(str(k)) + ': ' + e(str(v)) + '</li>' for k,v in status['market_errors'].items())
+    error_panel = '<div class="panel"><h2>Ошибки источника данных</h2><ul>' + errors + '</ul></div>' if errors else ''
     return f"""<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none';style-src 'unsafe-inline';base-uri 'none';form-action 'none'">
 <title>Mira Recovery | Walt Futures</title><style>
@@ -119,7 +122,7 @@ li{{padding:4px 0}}footer{{margin-top:25px;color:#94a7a0;font-size:12px}}
 <section class="panel"><h2>Рынки фьючерсов</h2><div class="markets">{''.join(cards)}</div></section>
 <section class="panel"><h2>Почему реальные сделки заблокированы</h2><ul>{reasons}</ul></section>
 <footer>Статический снимок GitHub Actions. Не является текущей котировкой Walt. Ордеров не создаёт. Trend Following и Momentum Breakout отключены.</footer>
-</main></html>"""
+{error_panel}</main></html>"""
 
 
 def main():
