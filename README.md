@@ -15,3 +15,9 @@
 `walt_guard.py` содержит детерминированную стресс-модель издержек/стопа, не исполняет и не разрешает ордер. `walt_status.py` — генератор статуса `RESEARCH_ONLY`. `python3 -m unittest discover -s tests -v` — тесты.
 
 [Подробная спецификация](SYSTEM.md).
+
+
+### Известный блокер на 9 ноября 2026
+Первая проверка после перехода с Binance Spot на **Binance USDⓈ-M Futures** корректно завершилась без сигналов: GitHub runner получает `HTTP 451` от официального `fapi.binance.com` по всем 8 рынкам. 19 тестов кода проходят; рыночные данные не получены. HTTP 451 может быть следствием ограничений доступности сервиса в регионе исполнения. Не обходить географические ограничения прокси/зеркалами. Для дальнейшего запуска нужен официально доступный источник исторических данных фьючерсов и разрешённый способ исполнения через Walt. GitHub будет показывать FAIL, а не ложный зелёный статус.
+
+Полезные официальные документы: [Walt agentic account](https://help.walt.io/article/1153-agentic-account), [Walt Perps Terms, bots platform](https://walt.io/docs/perps_terms), [Binance USDⓈ-M futures market data](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Kline-Candlestick-Data).
