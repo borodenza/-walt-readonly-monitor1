@@ -15,7 +15,7 @@ class FuturesScannerTests(unittest.TestCase):
     def test_only_mira_futures_strategy(self):
         self.assertEqual(scanner.ASSETS,scanner.MIRA_ASSETS)
         self.assertEqual(len(scanner.ASSETS),8)
-        self.assertTrue(scanner.BASE_URL.startswith('https://api.bybit.com/'))
+        self.assertTrue(scanner.BASE_URL.startswith('https://api.hyperliquid.xyz/'))
         self.assertFalse(hasattr(scanner,'evaluate_a'))
         self.assertFalse(hasattr(scanner,'perps_execute_operation'))
 
