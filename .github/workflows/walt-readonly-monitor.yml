@@ -4,6 +4,9 @@ on:
   schedule:
     # Every 15 minutes, away from top of hour (UTC). GitHub may delay/skip jobs.
     - cron: '7,22,37,52 * * * *'
+  push:
+    branches: [main]
+    paths: ['*.py', 'mira.html', '.github/workflows/walt-readonly-monitor.yml']
   workflow_dispatch:
 
 permissions:
@@ -41,21 +44,30 @@ jobs:
           else:
               try:
                   data = json.loads(p.read_text())
+                  mira = data.get('mira', {})
+                  print('Mira Recovery:', len(mira.get('proposals', [])), 'daily research proposals; data OK:', mira.get('ok', False))
                   for symbol, result in data.get('assets', {}).items():
                       print(f'### {symbol}')
                       print(f'- Strategy A: {result.get("strategy_a", "NO_SIGNAL")}')
-                      print(f'- Strategy B: {result.get("strategy_b", "NO_SIGNAL")}')
+
                       print('- Trade ready: **NO** (execution disabled)')
                       if result.get('error'):
                           print(f'- Data error: {result["error"]}')
               except Exception as exc:
                   print(f'Invalid report. No signals: {exc}')
           PY
+      - name: Build Mira dashboard
+        if: always()
+        run: python3 render_mira.py
       - name: Save diagnostic report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: walt-research-${{ github.run_id }}
-          path: walt-report.json
+          path: |
+            walt-report.json
+            mira-recovery.html
           if-no-files-found: warn
           retention-days: 7
+
+

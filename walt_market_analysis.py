@@ -16,14 +16,16 @@ import urllib.request
 BASE_URL = "https://data-api.binance.vision/api/v3/klines"
 ASSETS = ("BTCUSDT", "ETHUSDT")
 INTERVALS = {"5m": 300, "15m": 900, "1h": 3600}
+MIRA_ASSETS = tuple(asset + "USDT" for asset in
+                    ("BTC", "ETH", "SOL", "DOGE", "LINK", "AVAX", "ADA", "XRP"))
 COUNT = 250
 
 
-def fetch_candles(symbol, interval, now_ms=None):
-    if symbol not in ASSETS or interval not in INTERVALS:
+def fetch_candles(symbol, interval, now_ms=None, count=COUNT):
+    if symbol not in MIRA_ASSETS or interval not in INTERVALS:
         raise ValueError("Unapproved symbol or interval")
     url = BASE_URL + "?" + urllib.parse.urlencode({
-        "symbol": symbol, "interval": interval, "limit": COUNT
+        "symbol": symbol, "interval": interval, "limit": count
     })
     req = urllib.request.Request(url, headers={"User-Agent": "WaltResearchReadOnly/1.0"})
     with urllib.request.urlopen(req, timeout=15) as response:
@@ -36,6 +38,8 @@ def fetch_candles(symbol, interval, now_ms=None):
         if not isinstance(bar, list) or len(bar) < 7:
             raise ValueError("Invalid candle shape")
         start, end = int(bar[0]), int(bar[6])
+        if end != start + INTERVALS[interval] * 1000 - 1 or start % (INTERVALS[interval] * 1000):
+            raise ValueError("Misaligned candle")
         if end >= now_ms:  # Discard current, incomplete candle.
             continue
         open_, high, low, close, volume = map(float, (bar[1], bar[2], bar[3], bar[4], bar[5]))
@@ -129,38 +133,26 @@ def evaluate_a(data, bars):
     return f"Условный технический кандидат {direction}; без расчёта исполнения Walt сигнал запрещён"
 
 
-def evaluate_b(data, bars):
-    fast, mid, hourly = data["5m"], data["15m"], data["1h"]
-    long_break = fast["close"] > fast["resistance_prev20"] and mid["close"] > mid["ema20"]
-    short_break = fast["close"] < fast["support_prev20"] and mid["close"] < mid["ema20"]
-    if not (long_break or short_break):
-        return "Нет подтверждённого пробоя локального уровня"
-    direction = "LONG" if long_break else "SHORT"
-    if fast["volume_mean_prev20"] <= 0 or fast["volume_last"] < 1.5 * fast["volume_mean_prev20"]:
-        return "Недостаточное подтверждение пробоя объёмом"
-    if abs(fast["close"] - fast["ema20"]) > 2 * fast["atr14"]:
-        return "Цена слишком далеко от EMA20: запрет догонять импульс"
-    if direction == "LONG" and (fast["rsi14"] > 75 or hourly["close"] < hourly["ema50"]):
-        return "Перекупленность или конфликт с часовым трендом"
-    if direction == "SHORT" and (fast["rsi14"] < 25 or hourly["close"] > hourly["ema50"]):
-        return "Перепроданность или конфликт с часовым трендом"
-    return f"Условный технический кандидат {direction}; без расчёта исполнения Walt сигнал запрещён"
-
-
 def scan():
+    from mira import monitor_recovery
+    now = dt.datetime.now(dt.timezone.utc)
+    now_ms = int(now.timestamp() * 1000)
     out = {"mode": "READ_ONLY_RESEARCH", "source": "Binance spot public klines",
-           "execution": "DISABLED", "generated_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+           "execution": "DISABLED", "generated_utc": now.isoformat(),
            "assets": {}}
     for symbol in ASSETS:
         try:
-            bars = {tf: fetch_candles(symbol, tf) for tf in INTERVALS}
+            bars = {tf: fetch_candles(symbol, tf, now_ms) for tf in INTERVALS}
             data = {tf: calculate(v) for tf, v in bars.items()}
             out["assets"][symbol] = {"timeframes": data, "strategy_a": evaluate_a(data, bars),
-                                      "strategy_b": evaluate_b(data, bars), "trade_ready": False,
+                                      "trade_ready": False,
                                       "blocker": "External spot candles differ from Walt perpetuals; verify Walt price, market liquidity, USDC collateral, min size, stop, TP and net RR before trading"}
         except Exception as exc:
             out["assets"][symbol] = {"error": str(exc), "strategy_a": "NO_SIGNAL",
-                                      "strategy_b": "NO_SIGNAL", "trade_ready": False}
+                                      "trade_ready": False}
+    out["mira"] = monitor_recovery(MIRA_ASSETS, fetch_candles, now_ms)
+    out["limits"] = {"A": {"budget_usdt": 9, "risk_usdt": 0.09, "min_net_rr": 2, "daily_trades": 2, "leverage": 1},
+                     "B": {"budget_usdt": 9, "risk_usdt": 0.18, "daily_proposals": 3, "leverage": 1}}
     return out
 
 
@@ -170,4 +162,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     result = scan()
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    sys.exit(0 if all("timeframes" in x for x in result["assets"].values()) else 2)
+    sys.exit(0 if result["mira"]["ok"] and all("timeframes" in x for x in result["assets"].values()) else 2)
+

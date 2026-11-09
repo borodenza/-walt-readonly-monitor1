@@ -1,12 +1,14 @@
-# Walt read-only market monitor
+# Walt · монитор A и Mira Recovery
 
-Public-market research scanner for BTCUSDT / ETHUSDT spot OHLCV at 5m, 15m, 1h.
+GitHub Actions проверяет рынок в минуты 07, 22, 37 и 52 UTC (возможны задержки). На странице Actions выберите последний запуск и скачайте артефакт walt-research. Откройте mira-recovery.html. В JSON сохранены данные и причины отказа. Ошибка любого рынка B закрывает всю очередь B.
 
-- Uses only public Binance klines. No keys, wallet connection or trading methods.
-- Evaluates preliminary technical setups for A (Trend Following) and B (Momentum Breakout).
-- **Never creates executable orders**; all reports set trade_ready=false.
-- Scheduled every 15 minutes via GitHub Actions (best effort).
-- Run Actions > Walt read-only BTC ETH monitor > Run workflow.
-- Inspect run Summary and walt-report JSON artifact. Network failure means NO SIGNAL, never a fallback guess.
-- Binance spot market prices and volume are not Walt USDC perpetual prices. Final trade approval additionally requires Walt price, contract, margin, liquidity, fee, slippage, stop, TP and net risk checks.
-- Never store Walt trading credentials here.
+A сохраняет Trend Following BTC/ETH по закрытым спотовым свечам 1ч/15м/5м. B проверяет восемь сопоставленных крипторынков по 15м свечам Binance Spot. Вселенная B ограничена BTC, ETH, SOL, DOGE, LINK, AVAX, ADA, XRP. Сопоставление с активными контрактами Walt проверено 2026-11-09. Источник: https://data-api.binance.vision/api/v3/klines . Свечи спота дают предварительное наблюдение. История фьючерсов Walt в подключённом интерфейсе недоступна.
+
+B ищет снижение за 24ч ≥5%, доходность 7д выше 24ч, закрытие выше EMA20 и предыдущего максимума, повышающийся минимум, растущий RSI14 и объём выше среднего за 20 свечей. Очередь каждый раз восстанавливается по завершённым свечам с 00:00 UTC, по времени, при совпадении — по символу. До трёх разных пар за сутки, срок каждой карточки 15 минут. Решения сохраняются по ID в браузере при доступном хранилище. Подтверждение формирует текст для ручной передачи в Walt. В отчёте нет балансов, ключей, торговых методов или соединения со счётом.
+
+A: бюджет 9 USDT, риск ≤0.09 USDT, чистое RR ≥2, максимум 2 сделки/день, 1×. B: 9 USDT, риск ≤0.18 USDT, максимум 3 предложения/день, 1×. Сделок обеих стратегий всегда ноль. Лимиты риска — условия будущего допуска. Цена входа, защитный стоп, цель и чистая прибыль требуют отдельного расчёта по Walt.
+
+Для допуска нужны подтверждённые свободные USDC и конверсия в валюту риска, свежие условия и цена, допустимые размер и шаг, обе комиссии, неблагоприятное исполнение входа/выхода, funding за горизонт удержания, OI, объём и достаточная ликвидность. Нет данных для верхней оценки риска — пропуск. Повторно проверить позиции и ожидающие ордера, суммарную нагрузку, суточный лимит и приложенные к входу SL/TP. В текущем Walt исполнение требует отдельного preview и согласия по нему. Стоп рыночного типа не гарантирует цену. Автономное исполнение требует отдельного документированного механизма и разрешения.
+
+Локальный запуск (Python 3): `python -m unittest discover -s tests -v`, `python walt_market_analysis.py --json > walt-report.json`, `python render_mira.py`. При неполных данных сканер возвращает код 2 и сохраняет диагностический отчёт.
+
