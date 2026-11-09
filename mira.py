@@ -23,7 +23,7 @@ def candidate(symbol, bars, i):
         return None
     closed = bar["end_ms"] + 1
     return {"id": f"{symbol}-{closed}", "symbol": symbol, "closed_ms": closed,
-            "expires_ms": closed + PERIOD, "spot_close": price, "rsi": current_rsi,
+            "expires_ms": closed + PERIOD, "futures_close": price, "rsi": current_rsi,
             "change24_pct": 100 * day_change, "change7d_pct": 100 * week_change}
 
 
@@ -40,7 +40,7 @@ def daily_queue(events):
 
 
 def monitor_recovery(symbols, fetch, now_ms):
-    result = {"ok": False, "symbols": list(symbols), "source": "Binance Spot · 15m",
+    result = {"ok": False, "symbols": list(symbols), "source": "Binance USDⓈ-M Futures · 15m",
               "proposals": [], "observations": {}, "errors": {}}
     events = []
     latest = now_ms // PERIOD * PERIOD
@@ -57,7 +57,7 @@ def monitor_recovery(symbols, fetch, now_ms):
                         events.append(event)
             result["observations"][symbol] = {
                 "change24_pct": 100 * (bars[-1]["close"] / bars[-97]["close"] - 1),
-                "spot_close": bars[-1]["close"]}
+                "futures_close": bars[-1]["close"]}
         except Exception as exc:
             result["errors"][symbol] = str(exc)
     if not result["errors"]:
