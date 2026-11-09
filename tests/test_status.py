@@ -9,7 +9,7 @@ class MiraStatusTests(unittest.TestCase):
         self.report={
             'mode':'READ_ONLY_RESEARCH', 'execution':'DISABLED',
             'strategy':'MIRA_RECOVERY_ONLY',
-            'source':'Bybit V5 linear futures public klines',
+            'source':'Hyperliquid public perpetual candleSnapshot',
             'generated_utc':'2026-11-09T09:40:00+00:00',
             'mira':{
                 'ok':True,'observations':{k:{'futures_close':12,'change24_pct':-6} for k in WATCH},
