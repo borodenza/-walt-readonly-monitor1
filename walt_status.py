@@ -20,7 +20,7 @@ def build_status(report, now=None):
         report.get('mode') == 'READ_ONLY_RESEARCH'
         and report.get('strategy') == 'MIRA_RECOVERY_ONLY'
         and report.get('execution') == 'DISABLED'
-        and report.get('source') == 'Binance USDS-M futures public klines'
+        and report.get('source') == 'Bybit V5 linear futures public klines'
     )
     fresh = fresh and valid
     mira = report.get('mira') or {}
@@ -61,7 +61,7 @@ def build_status(report, now=None):
             'Не проверены текущие Walt quote, контракт, глубина/спред и обеспечение',
             'Не проверен чистый риск/стоп/тейк и суточный лимит по каждой заявке',
         ],
-        'notice': 'Mira использует Binance Futures только для исследования; это не торговый терминал.'
+        'notice': 'Mira использует Bybit Futures только для исследования; это не торговый терминал.'
     }
 
 
@@ -111,7 +111,7 @@ li{{padding:4px 0}}footer{{margin-top:25px;color:#94a7a0;font-size:12px}}
 @media(max-width:700px){{.stats,.markets{{grid-template-columns:repeat(2,1fr)}}main{{padding:22px 16px}}}}
 </style><main><div class="over">WALT / FUTURES RESEARCH</div><h1>Mira Recovery</h1>
 <p><span class="pill">Автоматическая торговля НЕ включена</span></p>
-<p class="muted">Одна стратегия · поиск восстановления после снижения от 5% за 24 часа · Binance USDⓈ-M Futures</p>
+<p class="muted">Одна стратегия · поиск восстановления после снижения от 5% за 24 часа · Bybit USDT Linear Futures</p>
 <div class="stats">
 <div class="stat"><small>Бюджет</small><strong>9 USDT</strong></div>
 <div class="stat"><small>Риск на сделку</small><strong>0,18 USDT</strong></div>
