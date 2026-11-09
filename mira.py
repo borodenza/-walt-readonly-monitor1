@@ -40,7 +40,7 @@ def daily_queue(events):
 
 
 def monitor_recovery(symbols, fetch, now_ms):
-    result = {"ok": False, "symbols": list(symbols), "source": "Bybit USDT Linear Futures · 15m",
+    result = {"ok": False, "symbols": list(symbols), "source": "Hyperliquid Perpetuals · 15m",
               "proposals": [], "observations": {}, "errors": {}}
     events = []
     latest = now_ms // PERIOD * PERIOD
