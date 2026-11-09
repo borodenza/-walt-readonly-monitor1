@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Read-only BTC/ETH intraday signal scanner using public Binance spot OHLCV.
+"""Mira Recovery only: read-only Binance USDⓈ-M futures research for Walt.
 
-Never connects to trading/order APIs. Output is research, NOT an executable order.
+NEVER accesses a Walt wallet, API keys or order methods. Does not place trades.
 Run: python3 walt_market_analysis.py --json
 """
-
 import argparse
 import datetime as dt
 import json
@@ -13,154 +12,102 @@ import sys
 import urllib.parse
 import urllib.request
 
-BASE_URL = "https://data-api.binance.vision/api/v3/klines"
-ASSETS = ("BTCUSDT", "ETHUSDT")
-INTERVALS = {"5m": 300, "15m": 900, "1h": 3600}
+# Public Binance futures candlesticks. Prices are research references, NOT Walt quotes.
+BASE_URL = "https://fapi.binance.com/fapi/v1/klines"
 MIRA_ASSETS = tuple(asset + "USDT" for asset in
                     ("BTC", "ETH", "SOL", "DOGE", "LINK", "AVAX", "ADA", "XRP"))
-COUNT = 250
-
+ASSETS = MIRA_ASSETS
+INTERVALS = {"15m": 900}
+COUNT = 800
 
 def fetch_candles(symbol, interval, now_ms=None, count=COUNT):
     if symbol not in MIRA_ASSETS or interval not in INTERVALS:
-        raise ValueError("Unapproved symbol or interval")
+        raise ValueError("Unapproved futures symbol or timeframe")
+    if not isinstance(count, int) or not (700 <= count <= 1500):
+        raise ValueError("Futures scan requires sufficient closed history")
     url = BASE_URL + "?" + urllib.parse.urlencode({
         "symbol": symbol, "interval": interval, "limit": count
     })
-    req = urllib.request.Request(url, headers={"User-Agent": "WaltResearchReadOnly/1.0"})
-    with urllib.request.urlopen(req, timeout=15) as response:
+    request = urllib.request.Request(url, headers={"User-Agent": "WaltMiraResearch/2.0"})
+    with urllib.request.urlopen(request, timeout=15) as response:
         raw = json.load(response)
     if not isinstance(raw, list):
-        raise ValueError("Invalid API response")
+        raise ValueError("Unexpected Binance futures response")
+
     now_ms = int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000) if now_ms is None else now_ms
+    period = INTERVALS[interval] * 1000
     candles = []
     for bar in raw:
         if not isinstance(bar, list) or len(bar) < 7:
-            raise ValueError("Invalid candle shape")
+            raise ValueError("Invalid futures candle")
         start, end = int(bar[0]), int(bar[6])
-        if end != start + INTERVALS[interval] * 1000 - 1 or start % (INTERVALS[interval] * 1000):
-            raise ValueError("Misaligned candle")
-        if end >= now_ms:  # Discard current, incomplete candle.
-            continue
-        open_, high, low, close, volume = map(float, (bar[1], bar[2], bar[3], bar[4], bar[5]))
-        if not all(math.isfinite(x) for x in (open_, high, low, close, volume)):
-            raise ValueError("Nonfinite OHLCV")
-        if low <= 0 or low > min(open_, close) or high < max(open_, close) or volume < 0:
-            raise ValueError("Invalid OHLCV values")
-        candles.append({"open_ms": start, "end_ms": end, "open": open_,
-                        "high": high, "low": low, "close": close, "volume": volume})
-    if len(candles) < 100:
-        raise ValueError("Insufficient closed candle history")
-    period = INTERVALS[interval] * 1000
-    if any(b["open_ms"] - a["open_ms"] != period for a, b in zip(candles, candles[1:])):
-        raise ValueError("Missing or duplicate candles")
-    # A signal based on stale data is prohibited; tolerance is one entire interval.
+        if end != start + period - 1 or start % period:
+            raise ValueError("Misaligned futures candle")
+        if end >= now_ms:
+            continue   # unclosed candle must not influence research
+        o, h, l, c, v = map(float, (bar[1], bar[2], bar[3], bar[4], bar[5]))
+        if not all(math.isfinite(x) for x in (o, h, l, c, v)):
+            raise ValueError("Nonfinite futures candle")
+        if l <= 0 or l > min(o, c) or h < max(o, c) or v < 0:
+            raise ValueError("Malformed futures OHLCV")
+        candles.append({"open_ms": start, "end_ms": end,
+                        "open": o, "high": h, "low": l, "close": c, "volume": v})
+    if len(candles) < 700:
+        raise ValueError("Insufficient closed futures candle history")
+    if any(b["open_ms"] - a["open_ms"] != period
+           for a, b in zip(candles, candles[1:])):
+        raise ValueError("Missing/duplicate futures candles")
     if now_ms - (candles[-1]["end_ms"] + 1) > period:
-        raise ValueError("Stale candles")
+        raise ValueError("Stale futures candles")
     return candles
-
 
 def ema(values, length):
     if len(values) < length:
         raise ValueError("Insufficient EMA history")
-    output = [None] * (length - 1) + [sum(values[:length]) / length]
-    alpha = 2 / (length + 1)
+    result = [None] * (length - 1) + [sum(values[:length]) / length]
+    a = 2 / (length + 1)
     for value in values[length:]:
-        output.append(alpha * value + (1 - alpha) * output[-1])
-    return output
-
+        result.append(a * value + (1 - a) * result[-1])
+    return result
 
 def rsi(values, length=14):
     if len(values) < length + 1:
         raise ValueError("Insufficient RSI history")
     changes = [b - a for a, b in zip(values, values[1:])]
-    gains = [max(v, 0.0) for v in changes]
-    losses = [max(-v, 0.0) for v in changes]
+    gains = [max(d, 0.0) for d in changes]
+    losses = [max(-d, 0.0) for d in changes]
     avg_gain = sum(gains[:length]) / length
     avg_loss = sum(losses[:length]) / length
-    for g, l in zip(gains[length:], losses[length:]):
-        avg_gain = (avg_gain * (length - 1) + g) / length
-        avg_loss = (avg_loss * (length - 1) + l) / length
+    for gain, loss in zip(gains[length:], losses[length:]):
+        avg_gain = (avg_gain * (length - 1) + gain) / length
+        avg_loss = (avg_loss * (length - 1) + loss) / length
     if avg_loss == 0:
         return 100.0 if avg_gain else 50.0
     return 100 - 100 / (1 + avg_gain / avg_loss)
-
-
-def atr(bars, length=14):
-    ranges = [max(b["high"] - b["low"], abs(b["high"] - a["close"]),
-                  abs(b["low"] - a["close"])) for a, b in zip(bars, bars[1:])]
-    value = sum(ranges[:length]) / length
-    for tr in ranges[length:]:
-        value = (value * (length - 1) + tr) / length
-    return value
-
-
-def calculate(bars):
-    close = [b["close"] for b in bars]
-    vol = [b["volume"] for b in bars]
-    return {
-        "close": close[-1], "ema20": ema(close, 20)[-1],
-        "ema50": ema(close, 50)[-1], "rsi14": rsi(close),
-        "atr14": atr(bars), "volume_last": vol[-1],
-        "volume_mean_prev20": sum(vol[-21:-1]) / 20,
-        "support_prev20": min(b["low"] for b in bars[-21:-1]),
-        "resistance_prev20": max(b["high"] for b in bars[-21:-1]),
-        "last_closed_utc": dt.datetime.fromtimestamp(
-            (bars[-1]["end_ms"] + 1) / 1000, dt.timezone.utc).isoformat(),
-    }
-
-
-def evaluate_a(data, bars):
-    hourly, mid, fast = data["1h"], data["15m"], data["5m"]
-    direction = ("LONG" if hourly["ema20"] > hourly["ema50"] and hourly["close"] > hourly["ema50"]
-                 else "SHORT" if hourly["ema20"] < hourly["ema50"] and hourly["close"] < hourly["ema50"]
-                 else None)
-    if not direction:
-        return "Нет согласованного часового тренда"
-    past = bars["15m"][-7:-1]
-    touched = any(abs(b["low" if direction == "LONG" else "high"] - mid["ema20"]) <= mid["atr14"] * .5
-                  for b in past)
-    candle = bars["15m"][-1]
-    resumed = candle["close"] > candle["open"] and candle["close"] > bars["15m"][-2]["high"] if direction == "LONG" else candle["close"] < candle["open"] and candle["close"] < bars["15m"][-2]["low"]
-    if not touched or not resumed:
-        return "Не подтверждён откат к EMA20 и возобновление тренда на закрытой 15m свече"
-    if direction == "LONG" and not (50 <= mid["rsi14"] <= 70):
-        return "RSI15m не соответствует фильтру Long"
-    if direction == "SHORT" and not (30 <= mid["rsi14"] <= 50):
-        return "RSI15m не соответствует фильтру Short"
-    if not (fast["volume_last"] > fast["volume_mean_prev20"]):
-        return "Нет подтверждения объёмом на 5m"
-    return f"Условный технический кандидат {direction}; без расчёта исполнения Walt сигнал запрещён"
-
 
 def scan():
     from mira import monitor_recovery
     now = dt.datetime.now(dt.timezone.utc)
     now_ms = int(now.timestamp() * 1000)
-    out = {"mode": "READ_ONLY_RESEARCH", "source": "Binance spot public klines",
-           "execution": "DISABLED", "generated_utc": now.isoformat(),
-           "assets": {}}
-    for symbol in ASSETS:
-        try:
-            bars = {tf: fetch_candles(symbol, tf, now_ms) for tf in INTERVALS}
-            data = {tf: calculate(v) for tf, v in bars.items()}
-            out["assets"][symbol] = {"timeframes": data, "strategy_a": evaluate_a(data, bars),
-                                      "trade_ready": False,
-                                      "blocker": "External spot candles differ from Walt perpetuals; verify Walt price, market liquidity, USDC collateral, min size, stop, TP and net RR before trading"}
-        except Exception as exc:
-            out["assets"][symbol] = {"error": str(exc), "strategy_a": "NO_SIGNAL",
-                                      "trade_ready": False}
-    out["mira"] = monitor_recovery(MIRA_ASSETS, fetch_candles, now_ms)
-    out["limits"] = {"A": {"budget_usdt": 9, "risk_usdt": 0.09, "min_net_rr": 2, "daily_trades": 2, "leverage": 1},
-                     "B": {"budget_usdt": 9, "risk_usdt": 0.18, "daily_proposals": 3, "leverage": 1}}
+    out = {
+        "mode": "READ_ONLY_RESEARCH", "execution": "DISABLED",
+        "strategy": "MIRA_RECOVERY_ONLY",
+        "source": "Binance USDS-M futures public klines",
+        "generated_utc": now.isoformat(),
+        "mira": monitor_recovery(MIRA_ASSETS, fetch_candles, now_ms),
+        "limits": {"MIRA": {"budget_usdt": 9, "risk_usdt": 0.18,
+                            "daily_proposals": 3, "leverage": 1,
+                            "max_open_positions": 1}},
+        "wallet_trading_enabled": False,
+        "walt_price_verified": False,
+        "note": "Research on Binance futures, not validated Walt order prices. No orders."
+    }
     return out
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument("--json", action="store_true", help="machine-readable report")
     args = parser.parse_args()
     result = scan()
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    sys.exit(0 if result["mira"]["ok"] and all("timeframes" in x for x in result["assets"].values()) else 2)
-
+    sys.exit(0 if result["mira"]["ok"] else 2)
