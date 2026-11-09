@@ -1,78 +1,48 @@
-name: Walt Mira Recovery - Futures Research Only
+name: Walt Mira SHORT - Rules Audit Only
 
+# This workflow NEVER scans external markets or Walt accounts.
+# Actual read-only market checks are scheduled in the ChatGPT automation,
+# every 4 hours. The old Hyperliquid LONG scanner is retired.
 on:
-  schedule:
-    # Best effort. GitHub may delay or skip scheduled runs.
-    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - '*.py'
-      - 'tests/**'
+      - 'PROMPT.md'
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'SYSTEM.md'
+      - 'rules/**'
+      - 'scripts/**'
       - '.github/workflows/walt-readonly-monitor.yml'
-  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: walt-mira-recovery
-  cancel-in-progress: false
-
 jobs:
-  mira_scan:
-    name: Mira Recovery | 8 futures markets | NO orders
+  rules_audit:
+    name: Check SHORT rule files - no market data, no orders
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - name: Check out without stored auth
+      - name: Checkout without stored auth
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Tests - strategy, no live orders, guard, status
-        run: python3 -m unittest discover -s tests -v
-
-      - name: Read CLOSED Hyperliquid perpetual candles (15m)
-        run: python3 walt_market_analysis.py --json > walt-report.json
-
-      - name: Create Mira-only research dashboard
-        if: always()
-        run: python3 walt_status.py
-
-      - name: Publish report and safety blockers
-        if: always()
-        shell: bash
+      - name: Verify SHORT strategy configuration exists
         run: |
-          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import json
+          python3 - <<'PY'
           from pathlib import Path
-          print('## Mira Recovery only — Futures research')
-          print('Trading is explicitly DISABLED. No Walt keys, no order placement.')
-          p=Path('walt-system.json')
-          if not p.exists():
-              print('No status. NO TRADE.')
-          else:
-              try:
-                  x=json.loads(p.read_text(encoding='utf-8'))
-                  print('- Strategy:',x['strategy'])
-                  print('- Binance futures data OK:',x['market_data_ok'])
-                  print('- Trading enabled:',x['auto_trade_enabled'])
-                  print('- Fresh research candidates:',len(x['research_candidates']))
-                  for r in x['blockers']:
-                      print('- Blocked: '+r)
-              except Exception as ex:
-                  print('Invalid report - NO TRADE:',ex)
+          strategy = Path('rules/strategy.md')
+          prompt = Path('PROMPT.md')
+          if not strategy.exists() or not prompt.exists():
+              print('SHORT strategy files missing; no market research performed.')
+              raise SystemExit(1)
+          content = strategy.read_text(encoding='utf-8').lower()
+          required = ('short', '10%', '5x', '2–2,5%', 'подтвержден')
+          if any(s not in content for s in required):
+              print('Strategy documentation incomplete; fail closed.')
+              raise SystemExit(1)
+          print('Mira SHORT rules validated. Trading disabled. No quotes or signals generated.')
           PY
-
-      - name: Archive dashboard and reproducible report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mira-futures-${{ github.run_id }}
-          path: |
-            walt-report.json
-            walt-system.json
-            walt-system.html
-          if-no-files-found: warn
-          retention-days: 7
