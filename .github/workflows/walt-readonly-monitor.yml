@@ -1,0 +1,61 @@
+name: Walt read-only BTC ETH monitor
+
+on:
+  schedule:
+    # Every 15 minutes, away from top of hour (UTC). GitHub may delay/skip jobs.
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: walt-readonly-monitor
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out read-only scanner
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Static tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Fetch and analyze public candles
+        run: python3 walt_market_analysis.py --json > walt-report.json
+      - name: Generate human-readable run summary
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          print('## Walt research monitor — read-only')
+          print('No Walt account access, no order placement, no trading credentials.')
+          p = Path('walt-report.json')
+          if not p.exists():
+              print('No report generated. No signals can be trusted.')
+          else:
+              try:
+                  data = json.loads(p.read_text())
+                  for symbol, result in data.get('assets', {}).items():
+                      print(f'### {symbol}')
+                      print(f'- Strategy A: {result.get("strategy_a", "NO_SIGNAL")}')
+                      print(f'- Strategy B: {result.get("strategy_b", "NO_SIGNAL")}')
+                      print('- Trade ready: **NO** (execution disabled)')
+                      if result.get('error'):
+                          print(f'- Data error: {result["error"]}')
+              except Exception as exc:
+                  print(f'Invalid report. No signals: {exc}')
+          PY
+      - name: Save diagnostic report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: walt-research-${{ github.run_id }}
+          path: walt-report.json
+          if-no-files-found: warn
+          retention-days: 7
