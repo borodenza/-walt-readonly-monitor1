@@ -1,0 +1,1 @@
+date_utc,contract_id,symbol,side,entry_price,stop_price,take_profit,quantity,margin,collateral_currency,leverage,exit_price,closed_utc,pnl_gross,fee_entry,fee_exit,funding,pnl_net,notes
