@@ -1,35 +1,19 @@
-# Спецификация системы Walt · Mira Recovery
+# Walt Mira SHORT — system specification (active)
 
-## Стратегия
-Одна — Mira Recovery. Старые Trend Following и Momentum Breakout удалены из активного анализатора и уведомлений. Пользователь запросил автоматическую торговлю фьючерсами; это намерение, но НЕ доказательство наличия необходимых технических разрешений на стороне Walt и не повод обходить его торговые ограничения.
+Active strategy since 2026-11-09: **SHORT only**, based only on connected Walt Perps read-only data. See [rules/strategy.md](rules/strategy.md) for conditions and [PROMPT.md](PROMPT.md) for agent instructions.
 
-Монитор `walt_market_analysis.py` запрашивает 800 последних 15m свечей USDT-маржируемых фьючерсов Binance по 8 символам, исключает незакрытые бары, проверяет валидность OHLCV, непрерывность, отсутствие дубликатов и свежесть. Если хотя бы один символ не проходит проверку, `mira.ok=false`, кандидатов нет. Скрипт не читает персональные счета и не имеет команд на покупку/продажу.
+## Topology
+- ChatGPT scheduled monitor: every 4 hours, condition watch; read-only Walt queries for actual market eligibility, account balances, orders and positions. One proposal maximum; no message when none qualifies.
+- GitHub: versioned strategy documents and offline risk tooling. Historical Hyperliquid LONG scan is disabled, and workflow has no scheduled market requests or order access.
+- Interactive chat: only after user selects «ПРОВЕРИТЬ ID» may a fresh, bounded Walt preview be requested. «ИСПОЛНИТЬ ИМЕННО ЭТОТ ОРДЕР» is a separate explicit authorization, not implied by the first reply.
 
-`mira.py`: поиск восстановления после падения ≥5% за сутки; направление — предполагаемый LONG, не автоматический ордер. Требования: семидневная динамика лучше суточной, RSI14 растёт, цена закрепилась выше EMA20 и максимума предыдущей свечи, минимум повышается, объём > среднего 20 свечей. Первые 3 уникальных кандидата в сутки UTC. Условие 7d > 24h само по себе не доказывает, что падение закончилось.
+## Required signals
+24h <= −5% and numerical 7d > 24h from Walt; high OI and 24h turnover, fresh spread/depth, confirmed lower move after rebound. 7d >24h by itself does not mean stabilization. Without a supported Walt history source: **NO SIGNAL**.
 
-## Торговый лимит
-9 USDT виртуальный бюджет; риск на сделку ≤0,18 USDT включая стоп, комиссии, фандинг и стресс-проскальзывание. Плечо 1×, максимум 1 открытая позиция на всю стратегию, максимум 3 новых предложения в день. Суммарный дневной лимит должен быть реализован до LIVE. Текущие документы Wallet/Perps на приложении могут показывать USDT, а возвращённые MCP контракты котируются в USDC. Требуется подтвердить механизм расчётов и фактически доступную маржу именно для используемого подключения.
+## Account/risk
+Exactly one position wallet-wide, no conflicting pending orders; read-only balances and verified collateral currency. Max risk 10% of available applicable collateral (must allow >=$1), leverage <=5× and contract max, stop 2–2.5% above SHORT entry, net RR>=2 after stress fees, slippage, funding; minimum/step checked; account liquidation risk examined. Risk is an estimate not a guaranteed fill. No automatic leverage/capital increases.
 
-## Необходимые технические условия до LIVE
-1. Документированный официально поддерживаемый Walt Trading Bots API либо отдельная agentic-среда, где разрешено автономное исполнение в специально выделенном субсчёте и пользователь разрешил его в Walt.
-2. Изолированный субсчёт для бота, минимальные права, отсутствие разрешений на вывод, безопасное хранение токенов вне кода и публичного GitHub. Предварительно тестирование на малом балансе и fail-safe аварийная остановка.
-3. В реальном времени: по каждой сделке доступная маржа, live Walt price, статус и шаг контракта, min base, комиссии, funding, OI, объём, глубина/спред, стоп на базе ATR/структуры, RR после расходов ≥2. На 1× и ≤0.18 USDT риск допустимость может отсутствовать; такие сделки игнорировать.
-4. Защитные stop-loss и take-profit должны прикрепляться к открытию; проверить наличие после открытия и завершение исполнения. Стоп не гарантирует цену в экстремальном рынке. В случае неизвестного статуса повторно читать ордера/позиции, не слепо повторять операции.
-5. Надёжное состояние на сервере/БД: ID сигналов и дедупликация, единый владелец ордеров, дневные лимиты и журнал PnL с комиссиями, восстановление после ошибок, запрет торгов при устаревшем источнике.
-6. Подтверждение реального permission scope в Walt и возможности запрета торгов при любом сбое. Текущий MCP требует индивидуальный предпросмотр и подтверждение; GitHub GitHub Actions с одним только чтением на него не влияет.
+## Retired implementation
+Files `mira.py`, `walt_market_analysis.py`, `walt_status.py`, `walt_guard.py` and their legacy tests are **historical code only**, not active scanner code. Do not run these as a substitute for Walt sourcing or present their reports as current eligible signals.
 
-Текущий статус **AUTO_REQUESTED / LIVE_DISABLED**. Нет средств автоматического исполнения. GitHub Actions действительно осуществляет только анализ публичных фьючерсных свечей. Код и результаты нельзя считать разрешением на конкретную сделку.
-
-Для проверки: GitHub Actions → последний успешный запуск → `mira-futures-<run-id>`. `walt-system.html` содержит только актуальный на момент генерации снимок; исторические кандидаты считаются устаревшими.
-
-
-## Фактический результат переключения
-На 9 ноября 2026, GitHub Actions run 42597902792: **19 unit-тестов успешны**, сетевая проверка фьючерсов Binance завершилась `HTTP Error 451` для всех восьми пар; `mira.ok=false`, предложений нет, `execution=DISABLED`. Старые стратегии действительно отсутствуют в активном сканере. Код завершает работу с ненулевым статусом, чтобы GitHub показывал ошибку источника; отчёт/панель сохраняются в архиве. HTTP 451 нельзя обходить неофициальными способами. Для полноценных рыночных данных потребуется поддерживаемый доступный источник свечей именно фьючерсов, а не спотовый «заменитель».
-
-Поддерживаемые Walt способы автономной торговли существуют в виде agentic- и Trading Bots Platform субсчетов, но данный чат не имеет действующего автономного интерфейса: [Agentic account](https://help.walt.io/article/1153-agentic-account), [Perps Terms](https://walt.io/docs/perps_terms). Нужны отдельное подключение, пользовательское разрешение в Walt и документированные права исполнителя.
-
-
-## Current approval workflow (9 ноября 2026)
-Актуальный исследовательский источник: официальный открытый публичный API Hyperliquid `POST https://api.hyperliquid.xyz/info`, `type=candleSnapshot`, 15m закрытые свечи 8 perpetual markets. 9 Nov 2026 successful scan run 42600561956: 19 tests pass, 8/8 sources OK, 0 proposals. Альтернативные Binance HTTP451 и Bybit HTTP403 были ранее недоступны; их не использовать как источник исполнимого торгового сигнала.
-
-Существующая почасовая автоматизация ChatGPT `Walt Mira · сделки только с подтверждением` включена. При валидном сигнале пользователь получает предложение `ПРОВЕРИТЬ <id>` или `ОТКЛОНИТЬ <id>`. `ПРОВЕРИТЬ` означает только повторную проверку данных Walt и `perps_prepare_order_place` с SL/TP, если все условия и доступные функции это поддерживают. Запрос предпросмотра — отдельная операция, не исполнение. После этого нужно второе, конкретное подтверждение, и лишь затем `perps_execute_operation`. Преждевременные или устаревшие сигналы закрыты. GitHub scanner никогда не вызывает Walt trading.
+System state: READ_ONLY_SHORT_SCOUT. Automatic execution: DISABLED.
