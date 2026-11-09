@@ -1,14 +1,13 @@
-name: Walt read-only BTC ETH monitor
+name: Walt Mira Recovery - Futures Research Only
 
 on:
   schedule:
-    # Every 15 min, best-effort GitHub schedule. Not guaranteed to run on time.
+    # Best effort. GitHub may delay or skip scheduled runs.
     - cron: '7,22,37,52 * * * *'
   push:
     branches: [main]
     paths:
       - '*.py'
-      - 'mira.html'
       - 'tests/**'
       - '.github/workflows/walt-readonly-monitor.yml'
   workflow_dispatch:
@@ -17,70 +16,63 @@ permissions:
   contents: read
 
 concurrency:
-  group: walt-readonly-monitor
+  group: walt-mira-recovery
   cancel-in-progress: false
 
 jobs:
-  scan:
+  mira_scan:
+    name: Mira Recovery | 8 futures markets | NO orders
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
-      - name: Check out research code (no persisted credentials)
+      - name: Check out without stored auth
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Verify scanner, risk guard and cockpit tests
+      - name: Tests - strategy, no live orders, guard, status
         run: python3 -m unittest discover -s tests -v
 
-      - name: Fetch CLOSED Binance public candles and analyze
+      - name: Fetch Binance USD-M Futures CLOSED 15m candles
         run: python3 walt_market_analysis.py --json > walt-report.json
 
-      - name: Build offline Mira interface
-        if: always()
-        run: python3 render_mira.py
-
-      - name: Build unified fail-closed system status
+      - name: Create Mira-only research dashboard
         if: always()
         run: python3 walt_status.py
 
-      - name: Report research results
+      - name: Publish report and safety blockers
         if: always()
         shell: bash
         run: |
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import json
           from pathlib import Path
-          print('## Walt A + Mira B — read-only market research')
-          print('NO orders, wallet APIs, trading credentials, paper profit claims, or account changes.')
-          p = Path('walt-system.json')
+          print('## Mira Recovery only — Futures research')
+          print('Trading is explicitly DISABLED. No Walt keys, no order placement.')
+          p=Path('walt-system.json')
           if not p.exists():
-              print('No validated report. NO trading signals.')
+              print('No status. NO TRADE.')
           else:
               try:
-                  r = json.loads(p.read_text())
-                  print('Market data fresh at generation:', r['fresh_at_check'])
-                  print('Execution:', r['execution'])
-                  for s, a in r['strategy_a']['assets'].items():
-                      print(f"- A {s}: {a['state']} — {a['analysis']}")
-                  print('B daily research proposals:', r['strategy_b']['proposals_observed'])
-                  print('## Safety blockers')
-                  for reason in r['global_blockers']:
-                      print('- ' + reason)
-                  print('Trade-ready: **NO**')
-              except Exception as exc:
-                  print(f'Invalid output: {exc}; NO trading signals.')
+                  x=json.loads(p.read_text(encoding='utf-8'))
+                  print('- Strategy:',x['strategy'])
+                  print('- Binance futures data OK:',x['market_data_ok'])
+                  print('- Trading enabled:',x['auto_trade_enabled'])
+                  print('- Fresh research candidates:',len(x['research_candidates']))
+                  for r in x['blockers']:
+                      print('- Blocked: '+r)
+              except Exception as ex:
+                  print('Invalid report - NO TRADE:',ex)
           PY
 
-      - name: Save diagnostics and both dashboards
+      - name: Archive dashboard and reproducible report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: walt-system-${{ github.run_id }}
+          name: mira-futures-${{ github.run_id }}
           path: |
             walt-report.json
-            mira-recovery.html
-            walt-system.html
             walt-system.json
+            walt-system.html
           if-no-files-found: warn
           retention-days: 7
