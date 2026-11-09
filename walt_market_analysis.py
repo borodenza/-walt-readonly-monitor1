@@ -12,14 +12,14 @@ import sys
 import urllib.parse
 import urllib.request
 
-# Public Binance futures candlesticks. Prices are research references, NOT Walt quotes.
+# Public Hyperliquid perpetual candles. Prices are research references, NOT Walt quotes.
 BASE_URL = "https://api.hyperliquid.xyz/info"
 MIRA_ASSETS = tuple(asset + "USDT" for asset in
                     ("BTC", "ETH", "SOL", "DOGE", "LINK", "AVAX", "ADA", "XRP"))
 ASSETS = MIRA_ASSETS
 INTERVALS = {"15m": 900}
 COUNT = 800
-ddef fetch_candles(symbol, interval, now_ms=None, count=COUNT):
+def fetch_candles(symbol, interval, now_ms=None, count=COUNT):
     """Hyperliquid public perp candles; fail closed on missing/stale data."""
     if symbol not in MIRA_ASSETS or interval != "15m":
         raise ValueError("Unapproved perpetual symbol or timeframe")
@@ -64,6 +64,7 @@ ddef fetch_candles(symbol, interval, now_ms=None, count=COUNT):
     if now_ms-(candles[-1]["end_ms"]+1)>period:
         raise ValueError("Stale perpetual candles")
     return candles
+
 def ema(values, length):
     if len(values) < length:
         raise ValueError("Insufficient EMA history")
