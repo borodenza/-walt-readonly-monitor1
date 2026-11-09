@@ -33,7 +33,7 @@ jobs:
       - name: Tests - strategy, no live orders, guard, status
         run: python3 -m unittest discover -s tests -v
 
-      - name: Fetch Binance USD-M Futures CLOSED 15m candles
+      - name: Read CLOSED Hyperliquid perpetual candles (15m)
         run: python3 walt_market_analysis.py --json > walt-report.json
 
       - name: Create Mira-only research dashboard
