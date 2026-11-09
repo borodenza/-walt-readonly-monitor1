@@ -40,8 +40,9 @@ jobs:
               print('SHORT strategy files missing; no market research performed.')
               raise SystemExit(1)
           content = strategy.read_text(encoding='utf-8').lower()
-          required = ('short', '10%', '5x', '2–2,5%', 'подтвержден')
-          if any(s not in content for s in required):
+          content = content.replace('ё', 'е')
+          required = ('short', '10%', '2–2,5%', 'подтвержд')
+          if any(s not in content for s in required) or not ('5×' in content or '5x' in content):
               print('Strategy documentation incomplete; fail closed.')
               raise SystemExit(1)
           print('Mira SHORT rules validated. Trading disabled. No quotes or signals generated.')
