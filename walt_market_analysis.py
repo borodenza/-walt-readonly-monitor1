@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mira Recovery only: read-only Binance USDⓈ-M futures research for Walt.
+"""Mira Recovery only: read-only Bybit USDT linear futures research for Walt.
 
 NEVER accesses a Walt wallet, API keys or order methods. Does not place trades.
 Run: python3 walt_market_analysis.py --json
@@ -13,53 +13,64 @@ import urllib.parse
 import urllib.request
 
 # Public Binance futures candlesticks. Prices are research references, NOT Walt quotes.
-BASE_URL = "https://fapi.binance.com/fapi/v1/klines"
+BASE_URL = "https://api.bybit.com/v5/market/kline"
 MIRA_ASSETS = tuple(asset + "USDT" for asset in
                     ("BTC", "ETH", "SOL", "DOGE", "LINK", "AVAX", "ADA", "XRP"))
 ASSETS = MIRA_ASSETS
 INTERVALS = {"15m": 900}
 COUNT = 800
-
 def fetch_candles(symbol, interval, now_ms=None, count=COUNT):
-    if symbol not in MIRA_ASSETS or interval not in INTERVALS:
-        raise ValueError("Unapproved futures symbol or timeframe")
-    if not isinstance(count, int) or not (700 <= count <= 1500):
-        raise ValueError("Futures scan requires sufficient closed history")
+    """Bybit V5 public linear USDT perps: rows newest first, current bar excluded.
+
+    If API or data quality fails, error out (no signal). Never fall back to spot.
+    """
+    if symbol not in MIRA_ASSETS or interval != "15m":
+        raise ValueError("Unapproved linear futures symbol or timeframe")
+    if not isinstance(count, int) or not (700 <= count <= 1000):
+        raise ValueError("Futures scan requires enough closed history")
     url = BASE_URL + "?" + urllib.parse.urlencode({
-        "symbol": symbol, "interval": interval, "limit": count
+        "category": "linear", "symbol": symbol,
+        "interval": "15", "limit": count
     })
-    request = urllib.request.Request(url, headers={"User-Agent": "WaltMiraResearch/2.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": "WaltMiraResearch/2.1"})
     with urllib.request.urlopen(request, timeout=15) as response:
         raw = json.load(response)
-    if not isinstance(raw, list):
-        raise ValueError("Unexpected Binance futures response")
-
+    if not isinstance(raw, dict) or raw.get("retCode") != 0:
+        raise ValueError("Bybit V5 futures market API returned error")
+    data = raw.get("result", {})
+    if not isinstance(data, dict) or data.get("category") != "linear" or data.get("symbol") != symbol:
+        raise ValueError("Bybit futures market mismatch")
+    rows = data.get("list")
+    if not isinstance(rows, list):
+        raise ValueError("Malformed Bybit futures candles")
     now_ms = int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000) if now_ms is None else now_ms
-    period = INTERVALS[interval] * 1000
+    period = 900_000
     candles = []
-    for bar in raw:
+    for bar in rows:
         if not isinstance(bar, list) or len(bar) < 7:
-            raise ValueError("Invalid futures candle")
-        start, end = int(bar[0]), int(bar[6])
-        if end != start + period - 1 or start % period:
+            raise ValueError("Malformed futures candle")
+        start = int(bar[0])
+        end = start + period - 1
+        if start % period:
             raise ValueError("Misaligned futures candle")
         if end >= now_ms:
-            continue   # unclosed candle must not influence research
+            continue  # Last-traded-price field is not a finished candle
         o, h, l, c, v = map(float, (bar[1], bar[2], bar[3], bar[4], bar[5]))
-        if not all(math.isfinite(x) for x in (o, h, l, c, v)):
+        if not all(math.isfinite(x) for x in (o,h,l,c,v)):
             raise ValueError("Nonfinite futures candle")
-        if l <= 0 or l > min(o, c) or h < max(o, c) or v < 0:
+        if l <= 0 or l > min(o,c) or h < max(o,c) or v < 0:
             raise ValueError("Malformed futures OHLCV")
-        candles.append({"open_ms": start, "end_ms": end,
-                        "open": o, "high": h, "low": l, "close": c, "volume": v})
+        candles.append({"open_ms":start, "end_ms":end,
+                        "open":o, "high":h, "low":l, "close":c, "volume":v})
+    candles.sort(key=lambda b: b["open_ms"])
     if len(candles) < 700:
         raise ValueError("Insufficient closed futures candle history")
-    if any(b["open_ms"] - a["open_ms"] != period
-           for a, b in zip(candles, candles[1:])):
-        raise ValueError("Missing/duplicate futures candles")
-    if now_ms - (candles[-1]["end_ms"] + 1) > period:
+    if any(b["open_ms"]-a["open_ms"] != period for a,b in zip(candles,candles[1:])):
+        raise ValueError("Missing or duplicate futures candles")
+    if now_ms-(candles[-1]["end_ms"]+1) > period:
         raise ValueError("Stale futures candles")
     return candles
+
 
 def ema(values, length):
     if len(values) < length:
@@ -92,7 +103,7 @@ def scan():
     out = {
         "mode": "READ_ONLY_RESEARCH", "execution": "DISABLED",
         "strategy": "MIRA_RECOVERY_ONLY",
-        "source": "Binance USDS-M futures public klines",
+        "source": "Bybit V5 linear futures public klines",
         "generated_utc": now.isoformat(),
         "mira": monitor_recovery(MIRA_ASSETS, fetch_candles, now_ms),
         "limits": {"MIRA": {"budget_usdt": 9, "risk_usdt": 0.18,
